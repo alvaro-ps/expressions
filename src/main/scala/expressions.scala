@@ -1,20 +1,6 @@
 package com.alvaro.expressions
 
-object utils {
-  import java.util.Calendar
-
-  def time[A](message: String)(block: => A): A = {
-    val start = System.nanoTime()
-    println(s"Timing $message")
-    val result = block
-    val end = System.nanoTime()
-
-    val differenceInMs = (end - start) / 1e6
-    println(s"Duration = $differenceInMs ms")
-
-    result
-  }
-}
+import timing.utils.time
 
 sealed trait Expr {
   def print: String
@@ -52,21 +38,22 @@ case class Sum(e1: Expr, e2: Expr) extends Expr {
   }
 
   def simplify: Expr = (e1.simplify, e2.simplify) match {
+    // Basic simplification
     case (Number(0), e: Expr)     => e.simplify
     case (e: Expr, Number(0))     => e.simplify
 
     case (n: Number, m: Number)   => Number(n.value + m.value)
     case (n: Number, x: Variable) => Sum(x, n)
 
+    // Ordered variables
     case (x: Variable, y: Variable) if (x.name > y.name) => Sum(y, x)
-
-    case (n: Number, Sum(x: Variable, m: Number)) => Sum(x, n.value + m.value)
-    case (Sum(x: Variable, n: Number), m: Number) => Sum(x, n.value + m.value)
-
-    case (Sum(x: Variable, n: Number), Sum(y: Variable, m: Number)) =>
-      Sum(Sum(x, y).simplify, Number(n.value + m.value))
     case (x: Variable, Sum(y: Variable, n: Number))  => Sum(Sum(x, y).simplify, n)
 
+    // Reductions
+    case (n: Number, Sum(x: Variable, m: Number)) => Sum(x, n.value + m.value)
+    case (Sum(x: Variable, n: Number), m: Number) => Sum(x, n.value + m.value)
+    case (Sum(x: Variable, n: Number), Sum(y: Variable, m: Number)) =>
+      Sum(Sum(x, y).simplify, Number(n.value + m.value))
     case (x: Variable, Prod(n: Number, y: Variable)) if (x == y) =>
       Prod(Number(n.value + 1), x)
     case (Prod(n: Number, x: Variable), y: Variable) if (x == y) =>
@@ -75,6 +62,8 @@ case class Sum(e1: Expr, e2: Expr) extends Expr {
         if (x == y) =>
       Prod(Number(n.value + m.value), x)
     case (e1: Expr, e2: Expr) if (e1 == e2) => Prod(Number(2), e1.simplify)
+
+    // general cases
     case (e1: Expr, e2: Expr)               => Sum(e1.simplify, e2.simplify)
     case _                                  => Sum(e1, e2)
   }
@@ -138,8 +127,7 @@ object Expr {
 
 object test extends App {
   def report(expr: Expr) = {
-    import utils.time
-
+    println()
     val result: Expr = time("simplification") {
       expr.simplify
     }
@@ -169,25 +157,25 @@ object test extends App {
       Prod(Variable("y"), Number(-1))
     ),
     Sum(
-      Prod(Variable("x"), Number(2)),
-      Prod(Variable("x"), Number(2))
+      Prod("x", 2),
+      Prod("x", 2)
     ),
-    Sum(Number(1), Sum(Number(1), Sum(Number(1), Number(0)))),
-    Sum(Variable("x"), Sum(Variable("x"), Sum(Variable("x"), Number(0)))),
+    Sum(1, Sum(1, Sum(1, 0))),
+    Sum("x", Sum("x", Sum("x", 0))),
     Prod(
-      Sum(Prod(Number(3), Variable("x")), Number(5)),
-      Prod(Prod(Number(4), Number(2)), Variable("x"))
+      Sum(Prod(3, "x"), 5),
+      Prod(Prod(4, 2), "x")
     ),
     Prod(
       Sum(
-        Sum(Number(5), Variable("x")),
-        Prod(Prod(Variable("y"), Variable("x")), Number(4))
+        Sum(5, "x"),
+        Prod(Prod("y", "x"), 4)
       ),
-      Number(2)
+      2
     ),
     Prod(
-      Sum(Number(2), Variable("x")),
-      Sum(Number(3), Variable("x"))
+      Sum(2, "x"),
+      Sum(3, "x")
     )
   )
 
