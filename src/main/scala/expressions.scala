@@ -22,6 +22,7 @@ sealed trait Expr {
   def simplify: Expr
 
   def prettyPrint: String = print
+  override def toString: String = print
 }
 
 case class Number(value: Int) extends Expr {
@@ -44,23 +45,32 @@ case class Sum(e1: Expr, e2: Expr) extends Expr {
   def print = s"(${e1.print} + ${e2.print})"
 
   override def prettyPrint = (e1, e2) match {
-    case (Variable(x), Variable(y)) => if (x < y) s"$x + $y" else s"$y + $x"
-    case (s1: Sum, e: Expr) => s"${s1.prettyPrint} + ${e.prettyPrint}"
-    case (e: Expr, s1: Sum) => s"${e.prettyPrint} + ${s1.prettyPrint}"
+    case (Variable(x), Variable(y)) => s"$x + $y"
+    case (s1: Sum, e: Expr)         => s"${s1.prettyPrint} + ${e.prettyPrint}"
+    case (e: Expr, s1: Sum)         => s"${e.prettyPrint} + ${s1.prettyPrint}"
     case _ => s"(${e1.prettyPrint} + ${e2.prettyPrint})"
   }
 
   def simplify: Expr = (e1.simplify, e2.simplify) match {
     case (Number(0), e: Expr)     => e.simplify
     case (e: Expr, Number(0))     => e.simplify
+
     case (n: Number, m: Number)   => Number(n.value + m.value)
     case (n: Number, x: Variable) => Sum(x, n)
+
+    case (x: Variable, y: Variable) if (x.name > y.name) => Sum(y, x)
+
+    case (n: Number, Sum(x: Variable, m: Number)) => Sum(x, n.value + m.value)
+    case (Sum(x: Variable, n: Number), m: Number) => Sum(x, n.value + m.value)
+
+    case (Sum(x: Variable, n: Number), Sum(y: Variable, m: Number)) =>
+      Sum(Sum(x, y).simplify, Number(n.value + m.value))
+    case (x: Variable, Sum(y: Variable, n: Number))  => Sum(Sum(x, y).simplify, n)
+
     case (x: Variable, Prod(n: Number, y: Variable)) if (x == y) =>
       Prod(Number(n.value + 1), x)
     case (Prod(n: Number, x: Variable), y: Variable) if (x == y) =>
       Prod(Number(n.value + 1), x)
-    case (Sum(n: Number, x: Variable), Sum(m: Number, y: Variable)) =>
-      Sum(Sum(x, y), Number(n.value + m.value))
     case (Prod(n: Number, x: Variable), Prod(m: Number, y: Variable))
         if (x == y) =>
       Prod(Number(n.value + m.value), x)
@@ -79,10 +89,10 @@ case class Prod(e1: Expr, e2: Expr) extends Expr {
   def print = s"(${e1.print} * ${e2.print})"
 
   override def prettyPrint = (e1, e2) match {
-    case (Number(n), Variable(x)) => s"$n$x"
+    case (Number(n), Variable(x))               => s"$n$x"
     case (Variable(x), Variable(y)) if (x == y) => s"$x ^ 2"
     case (Variable(x), Variable(y)) => if (x < y) s"$x$y" else s"$y$x"
-    case (Number(n), prod: Prod) => s"$n${prod.prettyPrint}"
+    case (Number(n), prod: Prod)    => s"$n${prod.prettyPrint}"
     case _ => s"(${e1.prettyPrint} * ${e2.prettyPrint})"
   }
 
@@ -117,6 +127,13 @@ case class Prod(e1: Expr, e2: Expr) extends Expr {
 
     case _ => Prod(e1.simplify, e2.simplify)
   }
+}
+
+object Expr {
+  implicit def intToNumber(n: Int): Number = Number(n)
+  implicit def stringToVariable(name: String)(implicit
+      variable_definitions: Map[String, Int]
+  ): Variable = Variable(name)
 }
 
 object test extends App {
